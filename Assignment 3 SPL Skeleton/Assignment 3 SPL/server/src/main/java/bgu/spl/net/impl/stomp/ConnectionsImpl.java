@@ -8,7 +8,8 @@ public class ConnectionsImpl<T> implements Connections<T>{
 
     private final ConcurrentHashMap<Integer, ConnectionHandler<T>> clientHandlers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> channelSubscribers = new ConcurrentHashMap<>();
-
+    private final ConcurrentHashMap<String, String> userPasswords = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Integer> activeUsers = new ConcurrentHashMap<>();
 
     @Override
     public boolean send(int connectionId, T msg) {
@@ -25,7 +26,13 @@ public class ConnectionsImpl<T> implements Connections<T>{
         ConcurrentHashMap<Integer, Integer> subs = channelSubscribers.get(channel);
         if(subs != null){
             for(Integer connId : subs.keySet()){
-                send(connId, msg);
+                Integer subId = subs.get(connId);
+                String finalMsg = "MESSAGE\n" +
+                              "subscription:" + subId + "\n" +
+                              msg; 
+                @SuppressWarnings("unchecked")
+                T msgToSend = (T)finalMsg; // sorry it annoyed Tair so much. We know it's a String so we can cast it 
+                send(connId, msgToSend);
             }
         }
     }
@@ -36,6 +43,7 @@ public class ConnectionsImpl<T> implements Connections<T>{
         for(ConcurrentHashMap<Integer, Integer> subs : channelSubscribers.values()){
             subs.remove(connectionId);
         }
+        activeUsers.values().removeIf(id -> id == connectionId);
     }
 
     public void connect(int connectId, ConnectionHandler<T> handler){
@@ -65,10 +73,35 @@ public class ConnectionsImpl<T> implements Connections<T>{
     public java.util.Set<Integer> getSubscribers(String channel) {
         ConcurrentHashMap<Integer, Integer> subscribers = channelSubscribers.get(channel);
         if (subscribers != null) {
-            return subscribers.keySet(); // מחזיר קבוצה של connectionId
+            return subscribers.keySet(); 
         }
         return null;
     }
+
+    public boolean isUserActive(String username) {
+        return activeUsers.containsKey(username);
+    }
+
+    public boolean isUserRegistered(String username) {
+        return userPasswords.containsKey(username);
+    }
+
+    public boolean isPasswordCorrect(String username, String password) {
+        String storedPass = userPasswords.get(username);
+        return storedPass != null && storedPass.equals(password);
+    }
+
+    public void register(String username, String password) {
+        userPasswords.put(username, password);
+    }
+
+    public void login(String username, int connectionId) {
+        activeUsers.put(username, connectionId);
+    }
+
+    public void logout(int connectionId) {
+        activeUsers.values().removeIf(id -> id == connectionId);
+    }    
 }
 
 
