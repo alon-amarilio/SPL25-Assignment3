@@ -26,7 +26,7 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
     @Override
     public void process(String message) {
         HashMap<String, String> headers = new HashMap<>();
-        String[] arr = message.split("\n");
+        String[] arr = message.split("\\r?\\n");
         int i = 1;
         
         while(i < arr.length && !arr[i].isEmpty()){
@@ -120,6 +120,7 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
                 connImpl.login(login, connectionId);
             }
             isLoggedIn = true;
+            System.out.println("DEBUG: Connection authorized. Sending CONNECTED...");
             connections.send(connectionId, "CONNECTED\nversion:1.2\n\n");
         }
     }
@@ -275,7 +276,7 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
         connections.send(connectionId, receiptMsg);
         
         if (connections instanceof ConnectionsImpl) {
-            ((ConnectionsImpl<String>) connections).logout(connectionId);
+            connections.disconnect(connectionId);
         }
 
         shouldTerminate = true;

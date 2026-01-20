@@ -1,4 +1,5 @@
 package bgu.spl.net.impl.stomp;
+
 import bgu.spl.net.srv.Server;
 
 public class StompServer {
@@ -13,17 +14,17 @@ public class StompServer {
         String serverType = args[1];
 
         if (serverType.equals("tpc")) {
-            Server.<String>threadPerClient(
+            Server.threadPerClient(
                     port,
-                    StompMessagingProtocolImpl::new,
+                    () -> new StompMessagingProtocolImpl(),
                     StompMessageEncoderDecoder::new
             ).serve();
 
         } else if (serverType.equals("reactor")) {
-            Server.<String>reactor(
+            Server.reactor(
                     Runtime.getRuntime().availableProcessors(),
                     port,
-                    StompMessagingProtocolImpl::new,
+                    () -> new StompMessagingProtocolImpl(), 
                     StompMessageEncoderDecoder::new
             ).serve();
 
