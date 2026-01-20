@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <mutex>
 
 // TODO: implement the STOMP protocol
 class StompProtocol
@@ -25,11 +26,11 @@ private:
     std::vector<std::string> split(const std::string& s, char delimiter);
 
 public:
-    StompProtocol::StompProtocol();
+    StompProtocol();
     
-    bool StompProtocol::shouldLogout();
-    bool StompProtocol::isUserConnected();
-    void StompProtocol::setConnected(bool status);
+    bool shouldLogout();
+    bool isUserConnected();
+    void setConnected(bool status);
     void processInput(std::string line, ConnectionHandler& handler);
     bool processServerResponse(std::string frame);
 };

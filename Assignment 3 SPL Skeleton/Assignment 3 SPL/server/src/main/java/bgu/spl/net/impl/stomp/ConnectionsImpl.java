@@ -8,7 +8,6 @@ public class ConnectionsImpl<T> implements Connections<T>{
 
     private final ConcurrentHashMap<Integer, ConnectionHandler<T>> clientHandlers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> channelSubscribers = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, String> userPasswords = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> activeUsers = new ConcurrentHashMap<>();
 
     @Override
@@ -80,19 +79,6 @@ public class ConnectionsImpl<T> implements Connections<T>{
 
     public boolean isUserActive(String username) {
         return activeUsers.containsKey(username);
-    }
-
-    public boolean isUserRegistered(String username) {
-        return userPasswords.containsKey(username);
-    }
-
-    public boolean isPasswordCorrect(String username, String password) {
-        String storedPass = userPasswords.get(username);
-        return storedPass != null && storedPass.equals(password);
-    }
-
-    public void register(String username, String password) {
-        userPasswords.put(username, password);
     }
 
     public void login(String username, int connectionId) {

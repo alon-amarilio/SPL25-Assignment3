@@ -1,9 +1,8 @@
 package bgu.spl.net.impl.stomp;
 
 import bgu.spl.net.api.StompMessagingProtocol;
-
 import bgu.spl.net.srv.Connections;
-
+import bgu.spl.net.srv.DatabaseService;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,6 +15,12 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
     private static final AtomicInteger messageIdCounter = new AtomicInteger(0);
     private HashMap<String, String> topics = new HashMap<>();
     private boolean isLoggedIn = false;
+    private DatabaseService db;
+    private String currentUsername = null;
+
+    public StompMessagingProtocolImpl(DatabaseService db) {
+        this.db = db;
+    }
 
     @Override
     public void start(int connectionId, Connections<String> connections) {
@@ -108,18 +113,39 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
                 sendError(headers, wholeMsg, "User already logged in");
                 return;
             }
-            if (connImpl.isUserRegistered(login)) {
-                if (!connImpl.isPasswordCorrect(login, passcode)) {
+
+            String queryUser = "SELECT password FROM users WHERE username='" + login + "'";
+            String dbResult = db.execute(queryUser); 
+
+            if (dbResult.startsWith("error")) {
+                sendError(headers, wholeMsg, "Database error");
+                return;
+            }
+
+            if (dbResult.isEmpty()) {
+                String insertUser = "INSERT INTO users (username, password) VALUES ('" + login + "', '" + passcode + "')";
+                String regResult = db.execute(insertUser);
+                
+                if (!regResult.equals("success")) {
+                    sendError(headers, wholeMsg, "Registration failed");
+                    return;
+                }
+            } else {
+                String storedPass = dbResult.trim();
+                if (!storedPass.equals(passcode)) {
                     sendError(headers, wholeMsg, "Wrong password");
                     return;
                 }
-                connImpl.login(login, connectionId);
             }
-            else {
-                connImpl.register(login, passcode);
-                connImpl.login(login, connectionId);
-            }
+            connImpl.login(login, connectionId);
+
+            long now = System.currentTimeMillis() / 1000;
+            String logCmd = "INSERT INTO logins (username, login_time) VALUES ('" + login + "', " + now + ")";
+            db.execute(logCmd);
+
             isLoggedIn = true;
+            currentUsername = login;
+
             System.out.println("DEBUG: Connection authorized. Sending CONNECTED...");
             connections.send(connectionId, "CONNECTED\nversion:1.2\n\n");
         }
@@ -161,6 +187,13 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
             sendError(headers, wholeMsg, "User is not subscribed to topic " + dest);
             return;
         }
+
+        long now = System.currentTimeMillis() / 1000;
+        String safeBody = "report_event";
+
+        String reportCmd = "INSERT INTO reports (username, file_name, time) VALUES ('" + 
+                           currentUsername + "', '" + safeBody + "', " + now + ")";
+        db.execute(reportCmd);
 
         String messageFrame = "message-id:" + messageIdCounter.incrementAndGet() + "\n" +
                               "destination:" + dest + "\n" +
@@ -267,6 +300,13 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
         if(receipt == null){
             sendError(headers, wholeMsg, "Missing a receipt header");
             return;
+        }
+
+        if (currentUsername != null) {
+            long now = System.currentTimeMillis() / 1000;
+            String updateCmd = "UPDATE logins SET logout_time=" + now + 
+                               " WHERE username='" + currentUsername + "' AND logout_time IS NULL";
+            db.execute(updateCmd);
         }
 
         String receiptId = headers.get("receipt");
