@@ -11,6 +11,7 @@ the methods below.
 import socket
 import sys
 import threading
+import sqlite3
 
 
 SERVER_NAME = "STOMP_PYTHON_SQL_SERVER"  # DO NOT CHANGE!
@@ -40,30 +41,32 @@ def init_database():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            registration_date TEXT
         )
-    """)
+    """)    
     
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS logins (
+        CREATE TABLE IF NOT EXISTS login_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL,
-            login_time INTEGER NOT NULL,
-            logout_time INTEGER,
+            login_time TEXT NOT NULL,
+            logout_time TEXT,
             FOREIGN KEY(username) REFERENCES users(username)
         )
     """)
     
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS reports (
+        CREATE TABLE IF NOT EXISTS file_tracking (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL,
-            file_name TEXT NOT NULL,
-            time INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            upload_time TEXT NOT NULL,
+            game_channel TEXT NOT NULL,
             FOREIGN KEY(username) REFERENCES users(username)
         )
     """)
-    
+
     conn.commit()
     conn.close()
     print(f"[{SERVER_NAME}] Database initialized successfully.")

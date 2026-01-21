@@ -2,6 +2,8 @@
 #include "../include/event.h"
 #include <iostream>
 #include <sstream>
+#include <fstream> 
+#include <algorithm> 
 
 // Constructor: Initializer list order MUST match member declaration order in .h
 StompProtocol::StompProtocol() :
@@ -140,8 +142,7 @@ void StompProtocol::processInput(std::string line, ConnectionHandler& handler) {
         // Send events one by one
         for (const Event& event : parsed.events) {
              std::string gameName = parsed.team_a_name + "_" + parsed.team_b_name;
-             // Here we usually should update our local gameUpdates map
-             // And send the frame
+
              std::string body = "user:" + username + "\n" +
                                 "team a:" + parsed.team_a_name + "\n" +
                                 "team b:" + parsed.team_b_name + "\n" +
@@ -171,8 +172,37 @@ void StompProtocol::processInput(std::string line, ConnectionHandler& handler) {
         }
     }
     else if (command == "summary") {
-         // Implement summary logic if needed
-         std::cout << "Summary command logic goes here" << std::endl;
+        if (tokens.size() < 4) {
+            std::cout << "Usage: summary {gameName} {user} {file}" << std::endl;
+            return;
+        }
+        std::string gameName = tokens[1];
+        std::string user = tokens[2];
+        std::string fileName = tokens[3];
+
+        std::lock_guard<std::mutex> lock(mapMutex);
+        
+        if (gameUpdates.count(gameName) && gameUpdates[gameName].count(user)) {
+            std::ofstream outFile(fileName); 
+            
+            if (outFile.is_open()) {
+                Event& firstEvent = gameUpdates[gameName][user][0];
+                outFile << firstEvent.get_team_a_name() << " vs " << firstEvent.get_team_b_name() << "\n";
+                outFile << "Game event reports:\n";
+                
+                for (const Event& e : gameUpdates[gameName][user]) {
+                    outFile << e.get_time() << " - " << e.get_name() << ":\n\n";
+                    outFile << e.get_discription() << "\n\n"; 
+                }
+                
+                outFile.close();
+                std::cout << "Summary created in " << fileName << std::endl;
+            } else {
+                std::cout << "Error: Could not open file " << fileName << std::endl;
+            }
+        } else {
+            std::cout << "No reports found for " << user << " in game " << gameName << std::endl;
+        }
     }
 }
 
@@ -187,7 +217,7 @@ bool StompProtocol::processServerResponse(std::string frame) {
         std::cout << "Login successful" << std::endl;
     }
     else if (command == "ERROR") {
-        std::cout << frame << std::endl; // Print full error
+        std::cout << frame << std::endl; 
         shouldTerminate = true;
         isConnected = false;
         return false;
@@ -200,6 +230,7 @@ bool StompProtocol::processServerResponse(std::string frame) {
         for (size_t i = 1; i < lines.size(); i++) {
             if (!bodyStarted && lines[i].find("destination:") == 0) {
                 dest = lines[i].substr(12);
+                if (!dest.empty() && dest.back() == '\r') dest.pop_back();
             }
             else if (!bodyStarted && lines[i].empty()) {
                 bodyStarted = true;
@@ -208,32 +239,56 @@ bool StompProtocol::processServerResponse(std::string frame) {
                 body += lines[i] + "\n";
             }
         }
+
+        std::string sender = "", team_a = "", team_b = "", event_name = "";
+        int event_time = 0;
+        std::vector<std::string> bodyLines = split(body, '\n');
+        
+        for (std::string& line : bodyLines) {
+            if (!line.empty() && line.back() == '\r') line.pop_back(); 
+            
+            if (line.find("user:") == 0) sender = line.substr(5);
+            else if (line.find("team a:") == 0) team_a = line.substr(7);
+            else if (line.find("team b:") == 0) team_b = line.substr(7);
+            else if (line.find("event name:") == 0) event_name = line.substr(11);
+            else if (line.find("time:") == 0) event_time = std::stoi(line.substr(5));
+        }
+
+        if (!sender.empty()) {
+            std::lock_guard<std::mutex> lock(mapMutex);
+            std::map<std::string, std::string> empty_map;
+            Event newEvent(team_a, team_b, event_name, event_time, empty_map, empty_map, empty_map, body);
+            gameUpdates[dest][sender].push_back(newEvent);
+        }
         std::cout << "Displaying update from: " << dest << "\n" << body << std::endl;
-        // Here you would parse the body back to Event object and update gameUpdates map
     }
     else if (command == "RECEIPT") {
-        std::string receiptIdStr = "";
-        for (size_t i = 1; i < lines.size(); i++) {
-             if (lines[i].find("receipt-id:") == 0) {
-                 receiptIdStr = lines[i].substr(11);
-                 break;
-             }
-        }
-        
-        if (!receiptIdStr.empty()) {
-            int rId = std::stoi(receiptIdStr);
-            std::lock_guard<std::mutex> lock(mapMutex);
-            if (pendingReceipts.count(rId)) {
-                std::string action = pendingReceipts[rId];
-                if (action == "DISCONNECT") {
-                    shouldTerminate = true;
-                    isConnected = false;
-                    return false;
+        std::string receiptId = "";
+        if (lines.size() > 1) {
+                size_t colonPos = lines[1].find(':');
+                if (colonPos != std::string::npos) {
+                    receiptId = lines[1].substr(colonPos + 1); 
                 }
-                std::cout << action << std::endl;
-                pendingReceipts.erase(rId);
             }
-        }
+        
+            if (!receiptId.empty()) {
+                try {
+                    int rId = std::stoi(receiptId);
+                    std::lock_guard<std::mutex> lock(mapMutex);
+                    if (pendingReceipts.count(rId)) {
+                        std::string action = pendingReceipts[rId];
+                        if (action == "DISCONNECT") {
+                            shouldTerminate = true;
+                            isConnected = false;
+                            return false;
+                        }
+
+                    std::cout << action << std::endl;
+                    pendingReceipts.erase(rId);
+                    }
+                }
+                catch (const std::exception& e){}
+            }
     }
     return true;
 }

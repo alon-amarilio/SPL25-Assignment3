@@ -3,12 +3,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import bgu.spl.net.srv.Connections;
 import bgu.spl.net.srv.ConnectionHandler;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConnectionsImpl<T> implements Connections<T>{
 
     private final ConcurrentHashMap<Integer, ConnectionHandler<T>> clientHandlers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> channelSubscribers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> activeUsers = new ConcurrentHashMap<>();
+    private static final AtomicInteger messageIdCounter = new AtomicInteger(0);
 
     @Override
     public boolean send(int connectionId, T msg) {
@@ -20,6 +22,7 @@ public class ConnectionsImpl<T> implements Connections<T>{
         return false;
     }
 
+    //changed some of the logic here! 
     @Override
     public void send(String channel, T msg) {
         ConcurrentHashMap<Integer, Integer> subs = channelSubscribers.get(channel);
@@ -28,6 +31,9 @@ public class ConnectionsImpl<T> implements Connections<T>{
                 Integer subId = subs.get(connId);
                 String finalMsg = "MESSAGE\n" +
                               "subscription:" + subId + "\n" +
+                              "message-id:" + messageIdCounter.incrementAndGet() + "\n" +
+                              "destination:" + channel + "\n" 
+                              +"\n" +
                               msg; 
                 @SuppressWarnings("unchecked")
                 T msgToSend = (T)finalMsg; // sorry it annoyed Tair so much. We know it's a String so we can cast it 

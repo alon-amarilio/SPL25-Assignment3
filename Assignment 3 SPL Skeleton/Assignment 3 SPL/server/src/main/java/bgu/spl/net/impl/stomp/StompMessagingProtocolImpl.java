@@ -30,6 +30,7 @@ public class StompMessagingProtocolImpl implements StompMessagingProtocol<String
 
     @Override
     public void process(String message) {
+        System.out.println("DEBUG: Received message:\n" + message);
         HashMap<String, String> headers = new HashMap<>();
         String[] arr = message.split("\\r?\\n");
         int i = 1;

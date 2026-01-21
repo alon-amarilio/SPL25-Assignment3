@@ -51,7 +51,8 @@ int main(int argc, char *argv[]) {
                 while (!protocol.shouldLogout()) {
                     std::string answer;
                     
-                    if (!handler->getLine(answer)) {
+                    //Changed if from if (!handler->getLine(answer))
+                    if (!handler->getFrameAscii(answer,'\0')) {
                         std::cout << "Disconnected from server." << std::endl;
                         break;
                     }
